@@ -13,46 +13,53 @@ jobs:
         os: [ubuntu-latest]
 
     steps:
-
       - name: Check actor
         run: |
           if [ "${{ github.actor }}" = "github-actions[bot]" ]; then
-            echo "Workflow triggered by actions@github.com. Exiting..."
-            exit 1
+            echo "Workflow triggered by bot. Exiting to avoid loops..."
+            exit 0 # Utilise exit 0 au lieu de 1 pour ne pas marquer le job en rouge inutilement
           fi
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Récupère tout l'historique pour faciliter les push/pull
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      - name: Echo a string
-        run: echo "Hello World"
-
-      - name: Multiline script
-        run: |
-          echo "repo: " ${{github.repository}}
-          python3 -V
-
       - name: Install dependencies
-        run: |
-          pip install pandas
+        run: pip install pandas
 
-      - name: Run Python script
+      - name: Run Python scripts
         run: |
           python3 biblio.py
-          ls -l
-      
-      - name: Run Python script
-        run: |
           python3 parite.py
-      
-      - name: Write output file
+          ls -l
+
+      - name: Save and Push changes
         run: |
-          mv magasin.csv ./output/output.csv
+          # Créer le dossier de destination s'il n'existe pas
+          mkdir -p output
+          
+          # Vérifier si magasin.csv existe avant de le déplacer
+          if [ -f magasin.csv ]; then
+            mv magasin.csv ./output/output.csv
+          fi
+          
           git config --local user.name "GitHub Actions Bot"
           git config --local user.email "actions@github.com"
-          git add . && git commit -m "Write output/output.csv" && git push
+          
+          git add .
+          
+          # On ne commit et push que s'il y a des changements réels
+          if ! git diff --staged --quiet; then
+            git commit -m "Automated update: added output files"
+            # Le rebase permet d'éviter l'erreur "fetch first" que tu as eue
+            git pull --rebase origin main
+            git push
+          else
+            echo "Rien à committer."
+          fi
